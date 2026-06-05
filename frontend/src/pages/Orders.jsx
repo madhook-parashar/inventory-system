@@ -1,135 +1,113 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
 function Orders() {
+  const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
-  const [orders, setOrders] = useState([]);
-
   const [customerId, setCustomerId] = useState("");
-  const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState("");
+  const [items, setItems] = useState([{ product_id: "", quantity: "" }]);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const fetchData = async () => {
-    const customersRes = await axios.get(
-      "http://127.0.0.1:8000/customers"
-    );
-
-    const productsRes = await axios.get(
-      "http://127.0.0.1:8000/products"
-    );
-
-    const ordersRes = await axios.get(
-      "http://127.0.0.1:8000/orders"
-    );
-
-    setCustomers(customersRes.data);
-    setProducts(productsRes.data);
-    setOrders(ordersRes.data);
+  const fetchAll = async () => {
+    const [o, c, p] = await Promise.all([
+      axios.get(`${API}/orders/`),
+      axios.get(`${API}/customers/`),
+      axios.get(`${API}/products/`),
+    ]);
+    setOrders(o.data);
+    setCustomers(c.data);
+    setProducts(p.data);
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchAll(); }, []);
+
+  const addItem = () => setItems([...items, { product_id: "", quantity: "" }]);
+
+  const updateItem = (index, field, value) => {
+    const updated = [...items];
+    updated[index][field] = value;
+    setItems(updated);
+  };
+
+  const removeItem = (index) => setItems(items.filter((_, i) => i !== index));
 
   const createOrder = async () => {
-    await axios.post(
-      "http://127.0.0.1:8000/orders",
-      null,
-      {
-        params: {
-          customer_id: customerId,
-          product_id: productId,
-          quantity: quantity,
-        },
-      }
-    );
-
-    setQuantity("");
-    fetchData();
+    try {
+      const payload = {
+        customer_id: parseInt(customerId),
+        items: items.map((i) => ({
+          product_id: parseInt(i.product_id),
+          quantity: parseInt(i.quantity),
+        })),
+      };
+      await axios.post(`${API}/orders/`, payload);
+      setSuccess("Order created!");
+      setCustomerId("");
+      setItems([{ product_id: "", quantity: "" }]);
+      setError("");
+      fetchAll();
+    } catch (e) { setError(e.response?.data?.detail || "Error creating order"); }
   };
 
   const deleteOrder = async (id) => {
-    await axios.delete(
-      `http://127.0.0.1:8000/orders/${id}`
-    );
-
-    fetchData();
+    await axios.delete(`${API}/orders/${id}`);
+    fetchAll();
   };
 
   return (
     <div style={{ padding: "20px" }}>
       <h1>Orders</h1>
+      <h2>Create Order</h2>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      {success && <p style={{ color: "green" }}>{success}</p>}
 
-      <select
-        value={customerId}
-        onChange={(e) => setCustomerId(e.target.value)}
-      >
+      <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
         <option value="">Select Customer</option>
-
         {customers.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
+          <option key={c.id} value={c.id}>{c.full_name} ({c.email})</option>
         ))}
       </select>
 
-      <select
-        value={productId}
-        onChange={(e) => setProductId(e.target.value)}
-      >
-        <option value="">Select Product</option>
+      <h3>Items</h3>
+      {items.map((item, index) => (
+        <div key={index} style={{ marginBottom: "8px" }}>
+          <select value={item.product_id} onChange={(e) => updateItem(index, "product_id", e.target.value)}>
+            <option value="">Select Product</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>{p.name} (SKU: {p.sku}, Stock: {p.quantity})</option>
+            ))}
+          </select>
+          <input
+            placeholder="Quantity"
+            value={item.quantity}
+            onChange={(e) => updateItem(index, "quantity", e.target.value)}
+            style={{ width: "80px", marginLeft: "8px" }}
+          />
+          {items.length > 1 && (
+            <button onClick={() => removeItem(index)} style={{ marginLeft: "8px" }}>Remove</button>
+          )}
+        </div>
+      ))}
+      <button onClick={addItem}>+ Add Item</button>
+      <br /><br />
+      <button onClick={createOrder}>Create Order</button>
 
-        {products.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
-
-      <input
-        type="number"
-        placeholder="Quantity"
-        value={quantity}
-        onChange={(e) => setQuantity(e.target.value)}
-      />
-
-      <button onClick={createOrder}>
-        Create Order
-      </button>
-
-      <br />
-      <br />
-
+      <br /><br />
+      <h2>All Orders</h2>
       <table border="1" cellPadding="10">
         <thead>
-          <tr>
-            <th>ID</th>
-            <th>Customer ID</th>
-            <th>Product ID</th>
-            <th>Quantity</th>
-            <th>Total Price</th>
-            <th>Action</th>
-          </tr>
+          <tr><th>ID</th><th>Customer ID</th><th>Total Amount</th><th>Status</th><th>Actions</th></tr>
         </thead>
-
         <tbody>
           {orders.map((o) => (
             <tr key={o.id}>
-              <td>{o.id}</td>
-              <td>{o.customer_id}</td>
-              <td>{o.product_id}</td>
-              <td>{o.quantity}</td>
-              <td>{o.total_price}</td>
-              <td>
-                <button
-                  onClick={() =>
-                    deleteOrder(o.id)
-                  }
-                >
-                  Delete
-                </button>
-              </td>
+              <td>{o.id}</td><td>{o.customer_id}</td>
+              <td>${o.total_amount.toFixed(2)}</td><td>{o.status}</td>
+              <td><button onClick={() => deleteOrder(o.id)}>Delete</button></td>
             </tr>
           ))}
         </tbody>

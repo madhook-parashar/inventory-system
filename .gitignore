@@ -1,8 +1,8 @@
-__pycache__/
-*.pyc
-
-frontend/node_modules/
-frontend/dist/
-
-.vscode/
 .env
+__pycache__
+*.pyc
+*.pyo
+node_modules
+dist
+.DS_Store
+*.egg-info
